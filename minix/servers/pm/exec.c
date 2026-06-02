@@ -38,6 +38,17 @@ int
 do_exec(void)
 {
 	message m;
+	/*Listar Processos em execuçao e seus caminhos*/
+	char caminho_completo[256];
+
+    if (sys_datacopy(mp->mp_endpoint, (vir_bytes) m_in.m_lc_pm_exec.name,
+                     SELF, (vir_bytes) caminho_completo,
+                     m_in.m_lc_pm_exec.namelen) == OK) {
+        
+        caminho_completo[m_in.m_lc_pm_exec.namelen] = '\0';
+        
+        printf("Executando:  %s\n", caminho_completo);
+    }
 
 	/* Forward call to VFS */
 	memset(&m, 0, sizeof(m));
