@@ -135,6 +135,10 @@ void proc_init(void)
 		rp->p_priority = 0;		/* no priority */
 		rp->p_quantum_size_ms = 0;	/* no quantum size */
 
+		/*Modificacoes Loteria*/
+		rp->p_tickets = 10;
+        rp->p_lottery_wins = 0;
+
 		/* arch-specific initialization */
 		arch_proc_reset(rp);
 	}
@@ -1784,32 +1788,79 @@ void dequeue(struct proc *rp)
  *===========================================================================*/
 static struct proc * pick_proc(void)
 {
-/* Decide who to run now.  A new process is selected and returned.
- * When a billable process is selected, record it in 'bill_ptr', so that the 
- * clock task can tell who to bill for system time.
- *
- * This function always uses the run queues of the local cpu!
- */
-  register struct proc *rp;			/* process to run */
-  struct proc **rdy_head;
-  int q;				/* iterate over queues */
+    register struct proc *rp;
+    struct proc **rdy_head;
+    int q;
 
-  /* Check each of the scheduling queues for ready processes. The number of
-   * queues is defined in proc.h, and priorities are set in the task table.
-   * If there are no processes ready to run, return NULL.
-   */
-  rdy_head = get_cpulocal_var(run_q_head);
-  for (q=0; q < NR_SCHED_QUEUES; q++) {	
-	if(!(rp = rdy_head[q])) {
-		TRACE(VF_PICKPROC, printf("cpu %d queue %d empty\n", cpuid, q););
-		continue;
-	}
-	assert(proc_is_runnable(rp));
-	if (priv(rp)->s_flags & BILLABLE)	 	
-		get_cpulocal_var(bill_ptr) = rp; /* bill for system time */
-	return rp;
-  }
-  return NULL;
+    int total_tickets = 0;
+    int winner;
+    int accumulated = 0;
+
+    struct proc *winner_proc = NULL;
+
+    rdy_head = get_cpulocal_var(run_q_head);
+
+    /* encontra primeira fila não vazia */
+    for(q = 0; q < NR_SCHED_QUEUES; q++) {
+
+        if(rdy_head[q])
+            break;
+    }
+
+    if(q >= NR_SCHED_QUEUES)
+        return NULL;
+
+    /*
+     * MELHORIA 3
+     * Recalcula tickets conforme prioridade
+     */
+    for(rp = rdy_head[q];
+        rp;
+        rp = rp->p_nextready)
+    {
+        rp->p_tickets =
+            (NR_SCHED_QUEUES - rp->p_priority) * 10;
+    }
+
+    /*
+     * Soma tickets
+     */
+    for(rp = rdy_head[q];
+        rp;
+        rp = rp->p_nextready)
+    {
+        total_tickets += rp->p_tickets;
+    }
+
+    winner = rand() % total_tickets;
+
+    /*
+     * Escolhe vencedor
+     */
+    for(rp = rdy_head[q];
+        rp;
+        rp = rp->p_nextready)
+    {
+        accumulated += rp->p_tickets;
+
+        if(accumulated > winner) {
+            winner_proc = rp;
+            break;
+        }
+    }
+
+    if(!winner_proc)
+        winner_proc = rdy_head[q];
+
+    /*
+     * MELHORIA 2
+     */
+    winner_proc->p_lottery_wins++;
+
+    if(priv(winner_proc)->s_flags & BILLABLE)
+        get_cpulocal_var(bill_ptr) = winner_proc;
+
+    return winner_proc;
 }
 
 /*===========================================================================*
