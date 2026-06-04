@@ -136,8 +136,8 @@ void proc_init(void)
 		rp->p_quantum_size_ms = 0;	/* no quantum size */
 
 		/*Modificacoes Loteria*/
-		rp->p_tickets = 10;
-        rp->p_lottery_wins = 0;
+        rp->p_tickets = (NR_SCHED_QUEUES - rp->p_priority) * 10;
+		rp->p_lottery_wins = 0;
 
 		/* arch-specific initialization */
 		arch_proc_reset(rp);
