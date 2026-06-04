@@ -63,6 +63,13 @@ static void enqueue_head(struct proc *rp);
 /* all idles share the same idle_priv structure */
 static struct priv idle_priv;
 
+/*Modificacoes Loteria*/
+static unsigned lottery_seed = 12345;
+static unsigned lottery_rand(void){
+	lottery_seed = lottery_seed * 1103515245 + 12345;
+	return lottery_seed;
+
+
 static void set_idle_name(char * name, int n)
 {
         int i, c;
@@ -1786,9 +1793,11 @@ void dequeue(struct proc *rp)
 /*===========================================================================*
  *				pick_proc				     * 
  *===========================================================================*/
+/*Modificacoes Loteria*/
 static struct proc * pick_proc(void)
 {
     register struct proc *rp;
+	struct proc *winner_proc = NULL;
     struct proc **rdy_head;
     int q;
 
@@ -1796,13 +1805,10 @@ static struct proc * pick_proc(void)
     int winner;
     int accumulated = 0;
 
-    struct proc *winner_proc = NULL;
-
     rdy_head = get_cpulocal_var(run_q_head);
 
     /* encontra primeira fila não vazia */
     for(q = 0; q < NR_SCHED_QUEUES; q++) {
-
         if(rdy_head[q])
             break;
     }
@@ -1810,37 +1816,23 @@ static struct proc * pick_proc(void)
     if(q >= NR_SCHED_QUEUES)
         return NULL;
 
-    /*
-     * MELHORIA 3
-     * Recalcula tickets conforme prioridade
-     */
-    for(rp = rdy_head[q];
-        rp;
-        rp = rp->p_nextready)
-    {
-        rp->p_tickets =
-            (NR_SCHED_QUEUES - rp->p_priority) * 10;
+    /*Recalcula tickets conforme prioridade*/
+    for(rp = rdy_head[q]; rp; rp = rp->p_nextready) {
+        rp->p_tickets = (NR_SCHED_QUEUES - rp->p_priority) * 10;
     }
 
-    /*
-     * Soma tickets
-     */
-    for(rp = rdy_head[q];
-        rp;
-        rp = rp->p_nextready)
-    {
+    /*Soma tickets*/
+    for(rp = rdy_head[q]; rp; rp = rp->p_nextready) {
         total_tickets += rp->p_tickets;
     }
 
+	if(total_tickets == 0)
+		return rdy_head[q];
+
     winner = rand() % total_tickets;
 
-    /*
-     * Escolhe vencedor
-     */
-    for(rp = rdy_head[q];
-        rp;
-        rp = rp->p_nextready)
-    {
+    /*Escolhe vencedor*/
+    for(rp = rdy_head[q]; rp; rp = rp->p_nextready) {
         accumulated += rp->p_tickets;
 
         if(accumulated > winner) {
@@ -1852,9 +1844,6 @@ static struct proc * pick_proc(void)
     if(!winner_proc)
         winner_proc = rdy_head[q];
 
-    /*
-     * MELHORIA 2
-     */
     winner_proc->p_lottery_wins++;
 
     if(priv(winner_proc)->s_flags & BILLABLE)
